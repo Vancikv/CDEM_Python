@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import itertools as it
 import tabulate as tbl
 import time
+from numerical import inverse_iter
 from basic import load_function
 
 class Domain(object):
@@ -35,7 +36,7 @@ class Domain(object):
         self.construct_stiffness_matrix()
         K = self.K_glob
         total_mass = sum(el.volume * el.density for el in self.elements)
-        mass_dofs, mass_coefficients = map(np.array, zip(self.mass_dof_array))
+        mass_dofs, mass_coefficients = map(np.array, zip(*self.mass_dof_array))
         mass_coefficients *= total_mass / float(np.sum(mass_coefficients))
         
         '''
@@ -43,6 +44,7 @@ class Domain(object):
         the resulting vector will be put back into the original order so that the nodal 
         values can be properly updated.
         '''
+        print mass_dofs
         for order, dofid in enumerate(mass_dofs):
             buff = np.copy(K[order,:])
             K[order,:] = K[dofid,:]
@@ -58,7 +60,22 @@ class Domain(object):
         Kbb = K[massdim:,massdim:]
         
         Ka = Kaa - np.dot(np.dot(Kab,np.linalg.inv(Kbb)),Kba)
+        M = np.diag(mass_coefficients)
+        # Ka y_a - omega_a ^ 2 Ma y_a = 0
+        result = inverse_iter(Ka, M, 10)
+        ya = result[0]
+        yb = -np.dot(np.linalg.inv(Kbb),np.dot(Kba, ya))
+        eshape = np.hstack([ya,yb])
         
+        # Rearrange unknowns back to pre-condensation order
+        for order, dofid in enumerate(mass_dofs):
+            buff = eshape[order]
+            eshape[order] = eshape[dofid]
+            eshape[dofid] = buff
+            
+        for nd in self.nodes:
+            for i, c in enumerate(nd.v_code):
+                nd.v_disp[i] = (c != 0) * eshape[c - 1]
 
     def save_to_text_file(self, path):
         file = open(path, 'w')
@@ -337,7 +354,7 @@ class DomainCDEMStatic(Domain):
         self.nodes = nodes
         self.stiffness_scaling = stiffness_scaling  # Contact forces are multiplied by edge length
         self.set_contacts(c_n, c_s)
-
+        
     def set_contacts(self, c_n, c_s):
         self.C = np.array([[c_n, 0.],
                            [0., c_s]])  # Contact stiffness matrix
