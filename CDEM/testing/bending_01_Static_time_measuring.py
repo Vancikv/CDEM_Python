@@ -18,3 +18,4 @@ dom = get_2D_quadrangle_domain(ni=3, nj=10, lx=100., ly=30., E=10000., nu=0.2, d
 
 
 dom.solve(timelog=get_outfile(['Dropbox', 'CDEM', '3point_bending_timing'], '3point_bending_Static_timing.txt'))
+dom.plot()

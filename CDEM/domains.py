@@ -18,6 +18,7 @@ class Domain(object):
         for el in self.elements:
             el.domain = weakref.ref(self)
         self.nodes = nodes
+        self.mass_dof_array = [] # List of dofs where mass is concentrated - tuples of (dof number, coefficient)
 
     def plot(self, magnitude=10., savefile='', show=True):
         fig = plt.figure()
@@ -29,6 +30,35 @@ class Domain(object):
             fig.savefig(savefile)
         if show:
             plt.show()
+            
+    def eigenshapes_condensation(self):
+        self.construct_stiffness_matrix()
+        K = self.K_glob
+        total_mass = sum(el.volume * el.density for el in self.elements)
+        mass_dofs, mass_coefficients = map(np.array, zip(self.mass_dof_array))
+        mass_coefficients *= total_mass / float(np.sum(mass_coefficients))
+        
+        '''
+        Rearrange the global stiffness matrix for the condensation. After the calculation,
+        the resulting vector will be put back into the original order so that the nodal 
+        values can be properly updated.
+        '''
+        for order, dofid in enumerate(mass_dofs):
+            buff = np.copy(K[order,:])
+            K[order,:] = K[dofid,:]
+            K[dofid,:] = buff
+            buff = np.copy(K[:,order])
+            K[:,order] = K[:,dofid]
+            K[:,dofid] = buff
+            
+        massdim = len(mass_dofs)
+        Kaa = K[:massdim,:massdim]
+        Kab = K[:massdim,massdim:]
+        Kba = K[massdim:,:massdim]
+        Kbb = K[massdim:,massdim:]
+        
+        Ka = Kaa - np.dot(np.dot(Kab,np.linalg.inv(Kbb)),Kba)
+        
 
     def save_to_text_file(self, path):
         file = open(path, 'w')
@@ -312,6 +342,44 @@ class DomainCDEMStatic(Domain):
         self.C = np.array([[c_n, 0.],
                            [0., c_s]])  # Contact stiffness matrix
 
+    def construct_stiffness_matrix(self):
+        els = self.elements
+        nds = self.nodes
+
+        code_count = 0
+        for nd in nds:
+            code_count = nd.set_codes(code_count)
+
+        K_glob = np.zeros((code_count, code_count))  # Global stiffness
+        for el in els:
+            el.set_matrices()
+            el.set_codes()
+            el.calc_normal_vectors()
+            cds = [(i, el.v_code[i]) for i in range(len(el.v_code)) if el.v_code[i] != 0]
+            K_loc = el.K
+            for ii, ij in it.product(cds, cds):
+                K_glob[ii[1] - 1, ij[1] - 1] += K_loc[ii[0], ij[0]]
+
+        # Contact components of the global stiffness matrix
+        for nbr, n_vect, l_edge in zip(nd.neighbors, nd.n_vects, nd.l_edges):
+            if nbr:
+                T = np.array([[n_vect[0], n_vect[1]],
+                              [-n_vect[1], n_vect[0]]])  # Transformation matrix
+                C = np.dot(np.dot(np.transpose(T), self.C), T)
+                if self.stiffness_scaling: C *= l_edge / 2.
+                c1 = [(i, nd.v_code[i]) for i in range(len(nd.v_code)) if nd.v_code[i] != 0]
+                nbrnd = nds[nbr - 1]
+                c2 = [(i, nbrnd.v_code[i]) for i in range(len(nbrnd.v_code)) if nbrnd.v_code[i] != 0]
+                for i, j in it.product(c1, c1 + c2):
+                    # du = u_i - u_0
+                    if i[1] == j[1]:
+                        K_glob[i[1] - 1, j[1] - 1] += C[i[0], j[0]]
+                    else:
+                        K_glob[i[1] - 1, j[1] - 1] -= C[i[0], j[0]]
+                        
+        self.K_glob = K_glob
+        
+        
     def solve(self, verbose=False, timelog=None):
         # Initialize local values
         els = self.elements
