@@ -8,6 +8,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import weakref
+import tabulate as tbl
 
 class PlotNode(object):
     def __init__(self, x, y, v_disp, v_velo, v_acce):
@@ -119,7 +120,7 @@ class ResultPlotter(object):
         self.ax.set_xlabel(xlbl, fontsize=24)
         self.ax.set_ylabel(ylbl, fontsize=24)
 
-    def plot_graph(self, t1, t2, val_name, val_id, node, label, xlbl='', ylbl=''):
+    def plot_graph(self, t1, t2, val_name, val_id, node, label, xlbl='', ylbl='', textfile=None):
         if t1 > t2:
             print "Error in plot_graph, wrong time boundaries (t1 > t2)."
         if t1 < 0.:
@@ -140,15 +141,20 @@ class ResultPlotter(object):
 
         self.ax.plot(plot_timeline, plot_vals, label=label)
         self.ax.legend()
-        self.ax.set_xlabel(xlbl, fontsize=24)
-        self.ax.set_ylabel(ylbl, fontsize=24)
+        self.ax.set_xlabel(xlbl, fontsize=18)
+        self.ax.set_ylabel(ylbl, fontsize=18)
+
+        if textfile:
+            fl = open(textfile, 'w')
+            fl.write(tbl.tabulate(np.transpose(np.vstack((plot_timeline, plot_vals)))))
+            fl.close()
         pass
 
 a = ResultPlotter()
 # a.load_data("C:/Users/Kapsak/Dropbox/VladimirVancik/CUDA/jobs/3pb", "3pbo")
 # a.plot_graph(0., 2.0, 'v_disp', 1, 59, 'v_disp', xlbl=r'$t$', ylbl=r'$u_y$')
 # a.save_plot("C:/Users/Kapsak/Dropbox/VladimirVancik/CUDA/jobs/3pb/3pbgraph.png")
-# a.plot_step(9999, 10)
+# a.plot_step(99, 100000)
 # a.save_plot("C:/Users/Kapsak/Dropbox/VladimirVancik/CUDA/jobs/3pb/3pbstep100000pic.png")
 # a.load_data("C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb", "3pbout")
 # a.plot_loadfunc(0., 30.0, 'Load function', xlbl=r'$t [s]$', ylbl=r'$lf [-]$')
@@ -160,8 +166,8 @@ a = ResultPlotter()
 a.load_data("C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb_long", "3pbout")
 a.plot_loadfunc(0.0, 0.03, 'Load function', xlbl=r'$t [s]$', ylbl=r'$lf [-]$')
 a.save_plot("C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb_long/3pb_loadfunc.pdf")
-a.plot_graph(0.0, 0.03, 'v_disp', 1, 119, 'Center deflection', xlbl=r'$t$', ylbl=r'$u_y$')
+a.plot_graph(0.0, 0.03, 'v_disp', 1, 119, 'Center deflection', xlbl=r'$t [s]$', ylbl=r'$u_y [m]$', textfile="C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb_long/3pbgraph.txt")
 a.save_plot("C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb_long/3pbgraph.pdf")
-a.plot_step(800, 1000)
-a.save_plot("C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb_long/3pbstep10000pic.pdf")
+a.plot_step(100, 10)
+a.save_plot("C:/Users/Kapsak/Dropbox/CDEM/Cpp_data/3pb_long/3pb_deformed.pdf")
 
