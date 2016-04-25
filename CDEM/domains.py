@@ -32,7 +32,7 @@ class Domain(object):
         if show:
             plt.show()
             
-    def eigenshapes_condensation(self):
+    def eigenshapes_condensation(self, nshape):
         self.construct_stiffness_matrix()
         K = self.K_glob
         total_mass = sum(el.volume * el.density for el in self.elements)
@@ -62,8 +62,9 @@ class Domain(object):
         Ka = Kaa - np.dot(np.dot(Kab,np.linalg.inv(Kbb)),Kba)
         M = np.diag(mass_coefficients)
         # Ka y_a - omega_a ^ 2 Ma y_a = 0
-        result = inverse_iter(Ka, M, 10)
+        result = inverse_iter(Ka, M,[],nshape)
         ya = result[0]
+ 
         yb = -np.dot(np.linalg.inv(Kbb),np.dot(Kba, ya))
         eshape = np.hstack([ya,yb])
         
@@ -312,6 +313,25 @@ class DomainCDEMDR(Domain):
                 plt.show()
 
 class DomainFEM(Domain):
+    def construct_stiffness_matrix(self):
+        els = self.elements
+        nds = self.nodes
+
+        code_count = 0
+        for nd in nds:
+            code_count = nd.set_codes(code_count)
+
+        K_glob = np.zeros((code_count, code_count))  # Global stiffness
+        for el in els:
+            el.set_matrices()
+            el.set_codes()
+            el.calc_normal_vectors()
+            cds = [(i, el.v_code[i]) for i in range(len(el.v_code)) if el.v_code[i] != 0]
+            K_loc = el.K
+            for ii, ij in it.product(cds, cds):
+                K_glob[ii[1] - 1, ij[1] - 1] += K_loc[ii[0], ij[0]]                        
+        self.K_glob = K_glob
+        
     def solve(self, verbose=False):
         # Initialize local values
         els = self.elements
